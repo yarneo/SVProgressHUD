@@ -34,6 +34,8 @@ static UIColor *SVProgressHUDBackgroundColor;
 static UIImage *SVProgressHUDInfoImage;
 static UIImage *SVProgressHUDSuccessImage;
 static UIImage *SVProgressHUDErrorImage;
+static UIImage *SVProgressHUDHeartImage;
+static NSArray *SVProgressHUDHeartImages;
 static UIView *SVProgressHUDExtensionView;
 
 static const CGFloat SVProgressHUDRingRadius = 18;
@@ -47,6 +49,7 @@ static const CGFloat SVProgressHUDUndefinedProgress = -1;
 @property (nonatomic, readwrite) SVProgressHUDStyle style;
 @property (nonatomic, strong, readonly) NSTimer *fadeOutTimer;
 @property (nonatomic, readonly, getter = isClear) BOOL clear;
+@property (nonatomic, assign) BOOL isHeart;
 
 @property (nonatomic, strong) UIControl *overlayView;
 @property (nonatomic, strong) UIView *hudView;
@@ -180,6 +183,16 @@ static const CGFloat SVProgressHUDUndefinedProgress = -1;
     SVProgressHUDErrorImage = image;
 }
 
++ (void)setHeartImage:(UIImage*)image{
+    [self sharedView];
+    SVProgressHUDHeartImage = image;
+}
+
++ (void)setHeartImages:(NSArray*)images {
+    [self sharedView];
+    SVProgressHUDHeartImages = images;
+}
+
 + (void)setViewForExtension:(UIView*)view{
     [self sharedView];
     SVProgressHUDExtensionView = view;
@@ -239,6 +252,11 @@ static const CGFloat SVProgressHUDUndefinedProgress = -1;
     [self showImage:SVProgressHUDInfoImage status:status];
 }
 
++ (void)showHeartSpinner {
+    [self sharedView].isHeart = YES;
+    [self showImage:SVProgressHUDHeartImage status:nil];
+}
+
 + (void)showInfoWithStatus:(NSString*)status maskType:(SVProgressHUDMaskType)maskType{
     SVProgressHUDMaskType existingMaskType = SVProgressHUDDefaultMaskType;
     [self setDefaultMaskType:maskType];
@@ -269,6 +287,11 @@ static const CGFloat SVProgressHUDUndefinedProgress = -1;
     [self showErrorWithStatus:status];
     [self setDefaultMaskType:existingMaskType];
 }
+
++ (void)showImage:(UIImage*)image{
+    [[self sharedView] showImage:image status:nil duration:-1];
+}
+
 
 + (void)showImage:(UIImage*)image status:(NSString*)status{
     NSTimeInterval displayInterval = [[self sharedView] displayDurationForString:status];
@@ -353,24 +376,35 @@ static const CGFloat SVProgressHUDUndefinedProgress = -1;
         UIImage* infoImage = [UIImage imageWithContentsOfFile:[imageBundle pathForResource:@"info" ofType:@"png"]];
         UIImage* successImage = [UIImage imageWithContentsOfFile:[imageBundle pathForResource:@"success" ofType:@"png"]];
         UIImage* errorImage = [UIImage imageWithContentsOfFile:[imageBundle pathForResource:@"error" ofType:@"png"]];
-
+        
+        UIImage* heartSpinner = [UIImage imageWithContentsOfFile:[imageBundle pathForResource:@"heart" ofType:@"png"]];
+        NSMutableArray* heartAnimationImages = [[NSMutableArray alloc] init];
+        for (int i=0; i<59; i++) {
+            NSString* frameName = [NSString stringWithFormat:@"animation2_%05d", i];
+            [heartAnimationImages addObject:[UIImage imageWithContentsOfFile:[imageBundle pathForResource:frameName ofType:@"png"]]];
+        }
+        
         if([[UIImage class] instancesRespondToSelector:@selector(imageWithRenderingMode:)]){
             SVProgressHUDInfoImage = [infoImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
             SVProgressHUDSuccessImage = [successImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
             SVProgressHUDErrorImage = [errorImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+            SVProgressHUDHeartImage = [heartSpinner imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
         } else{
             SVProgressHUDInfoImage = infoImage;
             SVProgressHUDSuccessImage = successImage;
             SVProgressHUDErrorImage = errorImage;
+            SVProgressHUDHeartImage = heartSpinner;
         }
+        
+        SVProgressHUDHeartImages = heartAnimationImages;
     }
 	
     return self;
 }
 
 - (void)updateHUDFrame{
-    CGFloat hudWidth = 100.0f;
-    CGFloat hudHeight = 100.0f;
+    CGFloat hudWidth = 50.0f;
+    CGFloat hudHeight = 50.0f;
     CGFloat stringHeightBuffer = 20.0f;
     CGFloat stringAndContentHeightBuffer = 80.0f;
     CGRect labelRect = CGRectZero;
@@ -882,6 +916,13 @@ static const CGFloat SVProgressHUDUndefinedProgress = -1;
     }
     self.imageView.image = image;
     self.imageView.hidden = NO;
+    if (self.isHeart) {
+        self.imageView.animationImages = SVProgressHUDHeartImages;
+        self.imageView.animationDuration = 3;
+        self.imageView.animationRepeatCount = 0;
+        [self.imageView startAnimating];
+    }
+    
     self.maskType = SVProgressHUDDefaultMaskType;
     self.style = SVProgressHUDDefaultStyle;
     
@@ -905,8 +946,10 @@ static const CGFloat SVProgressHUDUndefinedProgress = -1;
     UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, nil);
     UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, string);
     
-    self.fadeOutTimer = [NSTimer timerWithTimeInterval:duration target:self selector:@selector(dismiss) userInfo:nil repeats:NO];
-    [[NSRunLoop mainRunLoop] addTimer:self.fadeOutTimer forMode:NSRunLoopCommonModes];
+    if (self.isHeart != YES) {
+        self.fadeOutTimer = [NSTimer timerWithTimeInterval:duration target:self selector:@selector(dismiss) userInfo:nil repeats:NO];
+        [[NSRunLoop mainRunLoop] addTimer:self.fadeOutTimer forMode:NSRunLoopCommonModes];
+    }
 }
 
 - (void)dismissWithDelay:(NSTimeInterval)delay{
@@ -1162,7 +1205,7 @@ static const CGFloat SVProgressHUDUndefinedProgress = -1;
 
 - (UIImageView*)imageView{
     if(!_imageView){
-        _imageView = [[UIImageView alloc] initWithFrame:CGRectMake(0.0f, 0.0f, 28.0f, 28.0f)];
+        _imageView = [[UIImageView alloc] initWithFrame:CGRectMake(0.0f, 0.0f, 50.0f, 50.0f)];
     }
     if(!_imageView.superview){
         [self.hudView addSubview:_imageView];
